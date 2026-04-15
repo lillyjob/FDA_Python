@@ -3,15 +3,14 @@
 # A simple Streamlit stock analysis dashboard.
 # Run with:  uv run streamlit run app.py
 # -------------------------------------------------------
-
+import numpy as np
+from scipy import stats
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date, timedelta
 import math
-import numpy as np
-from scipy import stats
 
 # -- Page configuration ----------------------------------
 # st.set_page_config must be the FIRST Streamlit command in the script.
