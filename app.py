@@ -4,47 +4,66 @@
 # Run with:  uv run streamlit run app.py
 # -------------------------------------------------------
 import numpy as np
-from scipy import stats
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from datetime import date, timedelta
+from scipy.stats import skew, kurtosis, norm, probplot, jarque_bera
 import math
 
 # -- Page configuration ----------------------------------
 # st.set_page_config must be the FIRST Streamlit command in the script.
 # If you add any other st.* calls above this line, you'll get an error.
 st.set_page_config(page_title="Stock Analyzer", layout="wide")
-st.title("Stock Analysis Dashboard")
+st.title("Stock Comparison and Analysis App")
+st.caption("Compare 2 to 5 stocks, benchmark them against the S&P 500, and explore diversification.")
 
 # -- Sidebar: user inputs --------------------------------
 st.sidebar.header("Settings")
 
-ticker = st.sidebar.text_input("Stock Ticker", value="AAPL").upper().strip()
+ticker_text = st.sidebar.text_input(
+    "Enter 2 to 5 stock tickers (comma-separated)",
+    value="AAPL,MSFT,NVDA"
+)
 
-# Default date range: one year back from today
-default_start = date.today() - timedelta(days=365)
+default_start = date.today() - timedelta(days=365 * 3)
 start_date = st.sidebar.date_input("Start Date", value=default_start, min_value=date(1970, 1, 1))
 end_date = st.sidebar.date_input("End Date", value=date.today(), min_value=date(1970, 1, 1))
 
-# Validate that the date range makes sense
 if start_date >= end_date:
     st.sidebar.error("Start date must be before end date.")
     st.stop()
-    # Let the user pick a moving-average window
-ma_window = st.sidebar.slider(
-    "Moving Average Window (days)", min_value=5, max_value=200, value=50, step=5
-)
-# Risk-free rate for Sharpe ratio calculation
-risk_free_rate = st.sidebar.number_input(
-    "Risk-Free Rate (%)", min_value=0.0, max_value=20.0, value=4.5, step=0.1
-) / 100
 
-# Rolling volatility window
-vol_window = st.sidebar.slider(
-    "Rolling Volatility Window (days)", min_value=10, max_value=120, value=30, step=5
+if (end_date - start_date).days < 365:
+    st.sidebar.error("Please select at least a 1-year date range.")
+    st.stop()
+
+vol_window = st.sidebar.selectbox("Rolling Volatility Window (days)", [30, 60, 90], index=1)
+roll_corr_window = st.sidebar.selectbox("Rolling Correlation Window (days)", [30, 60, 90], index=1)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("About / Methodology")
+st.sidebar.write(
+    "This app uses adjusted close prices from Yahoo Finance via yfinance. "
+    "Returns are simple arithmetic returns from pct_change(). "
+    "Annualized return = mean daily return × 252. "
+    "Annualized volatility = daily standard deviation × √252."
 )
+
+tickers = [t.strip().upper() for t in ticker_text.split(",") if t.strip()]
+tickers = list(dict.fromkeys(tickers))
+
+if len(tickers) < 2:
+    st.error("Please enter at least 2 ticker symbols.")
+    st.stop()
+
+if len(tickers) > 5:
+    st.error("Please enter no more than 5 ticker symbols.")
+    st.stop()
+
+benchmark = "^GSPC"
 
 # -- Data download ----------------------------------------
 # We wrap the download in st.cache_data so repeated runs with
