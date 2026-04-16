@@ -51,10 +51,39 @@ vol_window = st.sidebar.slider(
 # the same inputs don't re-download every time. The ttl (time-to-live)
 # ensures the cache expires after one hour so data stays fresh.
 @st.cache_data(show_spinner="Fetching data...", ttl=3600)
-def load_data(ticker: str, start: date, end: date) -> pd.DataFrame:
-    """Download daily data from Yahoo Finance for a given date range."""
-    df = yf.download(ticker, start=start, end=end, progress=False)
-    return df
+def load_data(tickers: list[str], start: date, end: date):
+    all_tickers = tickers + [benchmark]
+    price_series = []
+    failed = []
+
+    for t in all_tickers:
+        try:
+            df = yf.download(t, start=start, end=end, progress=False, auto_adjust=False)
+            if df.empty or "Adj Close" not in df.columns:
+                failed.append(t)
+                continue
+            s = df["Adj Close"].copy()
+            s.name = t
+            price_series.append(s)
+        except Exception:
+            failed.append(t)
+
+    if not price_series:
+        return None, failed, []
+
+    prices = pd.concat(price_series, axis=1)
+
+    missing_pct = prices.isna().mean()
+    dropped = [c for c in prices.columns if c != benchmark and missing_pct[c] > 0.05]
+    kept = [c for c in prices.columns if c not in dropped]
+    prices = prices[kept]
+
+    prices = prices.dropna()
+
+    if prices.empty:
+        return None, failed, dropped
+
+    return prices, failed, dropped
 
 # -- Main logic -------------------------------------------
 if ticker:
